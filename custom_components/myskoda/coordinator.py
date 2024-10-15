@@ -6,9 +6,10 @@ from typing import Callable
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from myskoda import MySkoda, Vehicle
+from myskoda import MySkoda, Vehicle, AuthorizationFailedError
 from myskoda.event import (
     Event,
     EventAccess,
@@ -79,9 +80,12 @@ class MySkodaDataUpdateCoordinator(DataUpdateCoordinator[State]):
         myskoda.subscribe(self._on_mqtt_event)
 
     async def _async_update_data(self) -> State:
-        vehicle = await self.myskoda.get_vehicle(self.vin)
-        user = await self.myskoda.get_user()
-        return State(vehicle, user)
+        try:
+            vehicle = await self.myskoda.get_vehicle(self.vin)
+            user = await self.myskoda.get_user()
+            return State(vehicle, user)
+        except AuthorizationFailedError as ex:
+            raise ConfigEntryAuthFailed from ex
 
     async def _on_mqtt_event(self, event: Event) -> None:
         if event.vin != self.vin:
