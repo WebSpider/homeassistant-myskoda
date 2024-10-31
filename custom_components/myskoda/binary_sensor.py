@@ -8,20 +8,22 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import DiscoveryInfoType
+from homeassistant.helpers.typing import DiscoveryInfoType  # pyright: ignore [reportAttributeAccessIssue]
+
 from myskoda import common
 from myskoda.models.air_conditioning import AirConditioning
-from myskoda.models.common import DoorLockedState, OnOffState, OpenState
+from myskoda.models.common import (
+    DoorLockedState,
+    OnOffState,
+    OpenState,
+    ChargerLockedState,
+)
 from myskoda.models.info import CapabilityId
 from myskoda.models.status import Status
 
-from .entity import MySkodaEntity
-from .utils import (
-    InvalidCapabilityConfigurationError,
-    add_supported_entities,
-)
-
 from .const import COORDINATORS, DOMAIN
+from .entity import MySkodaEntity
+from .utils import add_supported_entities
 
 
 async def async_setup_entry(
@@ -54,26 +56,16 @@ class MySkodaBinarySensor(MySkodaEntity, BinarySensorEntity):
 
 
 class AirConditioningBinarySensor(MySkodaBinarySensor):
-    def _air_conditioning(self) -> AirConditioning:
-        air_conditioning = self.vehicle.air_conditioning
-        if air_conditioning is None:
-            raise InvalidCapabilityConfigurationError(
-                self.entity_description.key, self.vehicle
-            )
-        return air_conditioning
+    def _air_conditioning(self) -> AirConditioning | None:
+        return self.vehicle.air_conditioning
 
     def required_capabilities(self) -> list[CapabilityId]:
         return [CapabilityId.AIR_CONDITIONING]
 
 
 class StatusBinarySensor(MySkodaBinarySensor):
-    def _status(self) -> Status:
-        status = self.vehicle.status
-        if status is None:
-            raise InvalidCapabilityConfigurationError(
-                self.entity_description.key, self.vehicle
-            )
-        return status
+    def _status(self) -> Status | None:
+        return self.vehicle.status
 
     def required_capabilities(self) -> list[CapabilityId]:
         return [CapabilityId.STATE]
@@ -90,20 +82,9 @@ class ChargerConnected(AirConditioningBinarySensor):
     )
 
     @property
-    def is_on(self):  # noqa: D102
-        return (
-            self._air_conditioning().charger_connection_state
-            == common.ConnectionState.CONNECTED
-        )
-
-    @property
-    def icon(self):  # noqa: D102
-        if (
-            self._air_conditioning().charger_connection_state
-            == common.ConnectionState.CONNECTED
-        ):
-            return "mdi:power-plug"
-        return "mdi:power-plug-off"
+    def is_on(self) -> bool | None:  # noqa: D102
+        if ac := self._air_conditioning():
+            return ac.charger_connection_state == common.ConnectionState.CONNECTED
 
 
 class ChargerLocked(AirConditioningBinarySensor):
@@ -117,20 +98,10 @@ class ChargerLocked(AirConditioningBinarySensor):
     )
 
     @property
-    def is_on(self):  # noqa: D102
-        return (
-            self._air_conditioning().charger_lock_state
-            != common.ChargerLockedState.LOCKED
-        )
-
-    @property
-    def icon(self):  # noqa: D102
-        if (
-            self._air_conditioning().charger_lock_state
-            == common.ChargerLockedState.LOCKED
-        ):
-            return "mdi:lock"
-        return "mdi:lock-open"
+    def is_on(self) -> bool | None:  # noqa: D102
+        if ac := self._air_conditioning():
+            if ac.charger_lock_state != ChargerLockedState.INVALID:
+                return ac.charger_lock_state != common.ChargerLockedState.LOCKED
 
 
 class Locked(StatusBinarySensor):
@@ -146,14 +117,9 @@ class Locked(StatusBinarySensor):
     )
 
     @property
-    def is_on(self):  # noqa: D102
-        return not self._status().overall.locked == DoorLockedState.LOCKED
-
-    @property
-    def icon(self):  # noqa: D102
-        if self.is_on:
-            return "mdi:lock-open"
-        return "mdi:lock"
+    def is_on(self) -> bool | None:  # noqa: D102
+        if status := self._status():
+            return not status.overall.locked == DoorLockedState.LOCKED
 
 
 class DoorsLocked(StatusBinarySensor):
@@ -167,14 +133,9 @@ class DoorsLocked(StatusBinarySensor):
     )
 
     @property
-    def is_on(self):  # noqa: D102
-        return not self._status().overall.doors_locked == DoorLockedState.LOCKED
-
-    @property
-    def icon(self):  # noqa: D102
-        if self.is_on:
-            return "mdi:car-door-lock-open"
-        return "mdi:car-door-lock"
+    def is_on(self) -> bool | None:  # noqa: D102
+        if status := self._status():
+            return not status.overall.doors_locked == DoorLockedState.LOCKED
 
 
 class DoorsOpen(StatusBinarySensor):
@@ -184,13 +145,13 @@ class DoorsOpen(StatusBinarySensor):
         key="doors_open",
         name="Doors",
         device_class=BinarySensorDeviceClass.DOOR,
-        icon="mdi:car-door",
         translation_key="doors_open",
     )
 
     @property
-    def is_on(self):  # noqa: D102
-        return self._status().overall.doors == OpenState.OPEN
+    def is_on(self) -> bool | None:  # noqa: D102
+        if status := self._status():
+            return status.overall.doors == OpenState.OPEN
 
 
 class WindowsOpen(StatusBinarySensor):
@@ -200,13 +161,13 @@ class WindowsOpen(StatusBinarySensor):
         key="windows_open",
         name="Windows",
         device_class=BinarySensorDeviceClass.WINDOW,
-        icon="mdi:car-door",
         translation_key="windows_open",
     )
 
     @property
-    def is_on(self):  # noqa: D102
-        return self._status().overall.windows == OpenState.OPEN
+    def is_on(self) -> bool | None:  # noqa: D102
+        if status := self._status():
+            return status.overall.windows == OpenState.OPEN
 
 
 class TrunkOpen(StatusBinarySensor):
@@ -216,13 +177,13 @@ class TrunkOpen(StatusBinarySensor):
         key="trunk_open",
         name="Trunk",
         device_class=BinarySensorDeviceClass.OPENING,
-        icon="mdi:car",
         translation_key="trunk_open",
     )
 
     @property
-    def is_on(self):  # noqa: D102
-        return self._status().detail.trunk == OpenState.OPEN
+    def is_on(self) -> bool | None:  # noqa: D102
+        if status := self._status():
+            return status.detail.trunk == OpenState.OPEN
 
 
 class BonnetOpen(StatusBinarySensor):
@@ -232,13 +193,13 @@ class BonnetOpen(StatusBinarySensor):
         key="bonnet_open",
         name="Bonnet",
         device_class=BinarySensorDeviceClass.OPENING,
-        icon="mdi:car",
         translation_key="bonnet_open",
     )
 
     @property
-    def is_on(self):  # noqa: D102
-        return self._status().detail.bonnet == OpenState.OPEN
+    def is_on(self) -> bool | None:  # noqa: D102
+        if status := self._status():
+            return status.detail.bonnet == OpenState.OPEN
 
 
 class SunroofOpen(StatusBinarySensor):
@@ -248,23 +209,25 @@ class SunroofOpen(StatusBinarySensor):
         key="sunroof_open",
         name="Sunroof",
         device_class=BinarySensorDeviceClass.OPENING,
-        icon="mdi:car-select",
     )
 
     @property
-    def is_on(self):  # noqa: D102
-        if (
-            self._status().detail.sunroof is None
-            or self._status().detail.sunroof == OpenState.UNSUPPORTED
-        ):
-            return None
-        return self._status().detail.sunroof == OpenState.OPEN
+    def is_on(self) -> bool | None:  # noqa: D102
+        if status := self._status():
+            if (
+                status.detail.sunroof is None
+                or status.detail.sunroof == OpenState.UNSUPPORTED
+            ):
+                return
+            return status.detail.sunroof == OpenState.OPEN
 
     def is_supported(self) -> bool:
-        return (
-            super().is_supported()
-            and self._status().detail.sunroof != OpenState.UNSUPPORTED
-        )
+        if status := self._status():
+            return (
+                super().is_supported()
+                and status.detail.sunroof != OpenState.UNSUPPORTED
+            )
+        return False
 
 
 class LightsOn(StatusBinarySensor):
@@ -274,10 +237,10 @@ class LightsOn(StatusBinarySensor):
         key="lights_on",
         name="Lights",
         device_class=BinarySensorDeviceClass.LIGHT,
-        icon="mdi:car-light-high",
         translation_key="lights_on",
     )
 
     @property
-    def is_on(self):  # noqa: D102
-        return self._status().overall.lights == OnOffState.ON
+    def is_on(self) -> bool | None:  # noqa: D102
+        if status := self._status():
+            return status.overall.lights == OnOffState.ON

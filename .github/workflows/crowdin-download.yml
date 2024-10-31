@@ -3,12 +3,13 @@ name: Crowdin download
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '0 0,3,6,9,12,15,18,21 * * *'
 
 permissions: write-all
 
 jobs:
   synchronize-with-crowdin:
+    if: github.repository_owner == 'skodaconnect'
     runs-on: ubuntu-latest
 
     steps:

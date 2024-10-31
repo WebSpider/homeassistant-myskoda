@@ -3,11 +3,12 @@ from dataclasses import dataclass
 from datetime import timedelta
 import logging
 from typing import Callable
+from aiohttp import ClientError
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.debounce import Debouncer
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from myskoda import MySkoda, Vehicle
 from myskoda.event import (
     Event,
@@ -20,7 +21,7 @@ from myskoda.models.operation_request import OperationName, OperationStatus
 from myskoda.models.user import User
 from myskoda.mqtt import EventCharging, EventType
 
-from .const import DOMAIN, FETCH_INTERVAL_IN_MINUTES, API_COOLDOWN_IN_SECONDS
+from .const import API_COOLDOWN_IN_SECONDS, DOMAIN, FETCH_INTERVAL_IN_MINUTES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -79,8 +80,12 @@ class MySkodaDataUpdateCoordinator(DataUpdateCoordinator[State]):
         myskoda.subscribe(self._on_mqtt_event)
 
     async def _async_update_data(self) -> State:
-        vehicle = await self.myskoda.get_vehicle(self.vin)
-        user = await self.myskoda.get_user()
+        _LOGGER.debug("Performing scheduled update of all data for vin %s", self.vin)
+        try:
+            vehicle = await self.myskoda.get_vehicle(self.vin)
+            user = await self.myskoda.get_user()
+        except ClientError as err:
+            raise UpdateFailed("Error getting update from MySkoda API: %s", err)
         return State(vehicle, user)
 
     async def _on_mqtt_event(self, event: Event) -> None:
@@ -99,6 +104,14 @@ class MySkodaDataUpdateCoordinator(DataUpdateCoordinator[State]):
 
     async def _on_operation_event(self, event: EventOperation) -> None:
         if event.operation.status == OperationStatus.IN_PROGRESS:
+            return
+        if event.operation.status == OperationStatus.ERROR:
+            _LOGGER.error(
+                "Error received from car in operation %s, reason: %s. Requesting MySkoda full update",
+                event.operation.status,
+                event.operation.error_code,
+            )
+            await self.update_vehicle()
             return
         if event.operation.operation in [
             OperationName.STOP_AIR_CONDITIONING,
@@ -127,11 +140,11 @@ class MySkodaDataUpdateCoordinator(DataUpdateCoordinator[State]):
         else:
             status = vehicle.charging.status
 
-            status.battery.remaining_cruising_range_in_meters = data.charged_range
+            status.battery.remaining_cruising_range_in_meters = (
+                data.charged_range * 1000
+            )
             status.battery.state_of_charge_in_percent = data.soc
             status.state = data.state
-            status.state = data.state
-        self.async_set_updated_data
 
         if vehicle.driving_range is None:
             await self.update_driving_range()
@@ -158,28 +171,48 @@ class MySkodaDataUpdateCoordinator(DataUpdateCoordinator[State]):
 
     async def _update_driving_range(self) -> None:
         _LOGGER.debug("Updating driving range for %s", self.vin)
-        driving_range = await self.myskoda.get_driving_range(self.vin)
+        try:
+            driving_range = await self.myskoda.get_driving_range(self.vin)
+        except ClientError as err:
+            self.async_set_update_error(err)
+            return
+
         vehicle = self.data.vehicle
         vehicle.driving_range = driving_range
         self.set_updated_vehicle(vehicle)
 
     async def _update_charging(self) -> None:
         _LOGGER.debug("Updating charging information for %s", self.vin)
-        charging = await self.myskoda.get_charging(self.vin)
+        try:
+            charging = await self.myskoda.get_charging(self.vin)
+        except ClientError as err:
+            self.async_set_update_error(err)
+            return
+
         vehicle = self.data.vehicle
         vehicle.charging = charging
         self.set_updated_vehicle(vehicle)
 
     async def _update_air_conditioning(self) -> None:
         _LOGGER.debug("Updating air conditioning for %s", self.vin)
-        air_conditioning = await self.myskoda.get_air_conditioning(self.vin)
+        try:
+            air_conditioning = await self.myskoda.get_air_conditioning(self.vin)
+        except ClientError as err:
+            self.async_set_update_error(err)
+            return
+
         vehicle = self.data.vehicle
         vehicle.air_conditioning = air_conditioning
         self.set_updated_vehicle(vehicle)
 
     async def _update_vehicle(self) -> None:
         _LOGGER.debug("Updating full vehicle for %s", self.vin)
-        vehicle = await self.myskoda.get_vehicle(self.vin)
+        try:
+            vehicle = await self.myskoda.get_vehicle(self.vin)
+        except ClientError as err:
+            self.async_set_update_error(err)
+            return
+
         self.set_updated_vehicle(vehicle)
 
     def _debounce(self, func: RefreshFunction) -> RefreshFunction:
