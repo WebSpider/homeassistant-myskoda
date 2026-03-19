@@ -23,6 +23,7 @@ from myskoda.models.user import User
 
 from .const import (
     API_COOLDOWN_IN_SECONDS,
+    CONF_MQTT,
     CONF_POLL_INTERVAL,
     COORDINATORS,
     DEFAULT_FETCH_INTERVAL_IN_MINUTES,
@@ -164,7 +165,12 @@ class MySkodaDataUpdateCoordinator(DataUpdateCoordinator[State]):
                     coord = hass.data[DOMAIN][self.entry.entry_id][COORDINATORS][
                         self.vin
                     ]
-                    if not coord.myskoda.mqtt and not coord._mqtt_connecting:
+                    use_mqtt = self.entry.options.get(CONF_MQTT, True)
+                    if (
+                        use_mqtt
+                        and not coord.myskoda.mqtt
+                        and not coord._mqtt_connecting
+                    ):
                         self.entry.async_create_background_task(
                             self.hass, coord._mqtt_connect(), "mqtt"
                         )

@@ -9,6 +9,7 @@ API_COOLDOWN_IN_SECONDS = 30.0
 MQTT_RECONNECT_INTERVAL_IN_SECONDS = 300
 
 # Configuration information
+CONF_MQTT = "mqtt"
 CONF_USERNAME = "email"
 CONF_PASSWORD = "password"
 CONF_POLL_INTERVAL = "poll_interval_in_minutes"

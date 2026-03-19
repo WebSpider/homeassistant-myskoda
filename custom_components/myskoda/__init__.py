@@ -25,6 +25,7 @@ from myskoda.auth.authorization import (
 )
 
 from .const import (
+    CONF_MQTT,
     CONF_USERNAME,
     CONF_PASSWORD,
     CONF_REFRESH_TOKEN,
@@ -380,6 +381,32 @@ async def async_migrate_entry(hass: HomeAssistant, entry: MySkodaConfigEntry) ->
                     minor_version=new_minor_version,
                     data=entry_data,
                 )
+
+        if entry.minor_version < 6:
+            # Add support for disabling mqtt
+            _LOGGER.info(
+                "Starting migration to config schema 2.6, adding support for disabling mqtt"
+            )
+
+            new_version = 2
+            new_minor_version = 6
+
+            if entry.data.get(CONF_MQTT):
+                _LOGGER.warning(
+                    "Found mqtt config present, this should not happen. Possible data corruption. Please open an issue for this with the integration developers"
+                )
+                return False
+            else:
+                entry_data[CONF_MQTT] = (
+                    True  # Default value is on for backward compatibility
+                )
+
+            hass.config_entries.async_update_entry(
+                entry,
+                version=new_version,
+                minor_version=new_minor_version,
+                data=entry_data,
+            )
 
         # Add any more minor migrations here. Minor migrations only add or change data. Removals are major.
 

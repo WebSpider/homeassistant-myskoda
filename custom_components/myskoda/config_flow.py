@@ -36,6 +36,7 @@ from myskoda.auth.authorization import (
 
 from .const import (
     DOMAIN,
+    CONF_MQTT,
     CONF_PASSWORD,
     CONF_POLL_INTERVAL,
     CONF_POLL_INTERVAL_MIN,
@@ -97,6 +98,7 @@ OPTIONS_SCHEMA = vol.Schema(
         vol.Optional(CONF_POLL_INTERVAL): int,
         vol.Optional(CONF_READONLY, default=False): bool,
         vol.Optional(CONF_SPIN): str,
+        vol.Optional(CONF_MQTT): bool,
     }
 )
 OPTIONS_FLOW = {
@@ -111,7 +113,7 @@ class ConfigFlow(BaseConfigFlow, domain=DOMAIN):
     """Handle a config flow for MySkoda."""
 
     VERSION = 2
-    MINOR_VERSION = 5
+    MINOR_VERSION = 6
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
