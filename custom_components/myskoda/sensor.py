@@ -96,6 +96,7 @@ async def async_setup_entry(
 
     async_add_entities(sensors)
 
+
 class MySkodaSensor(MySkodaEntity, SensorEntity):
     def _charging(self) -> Charging | None:
         if charging := self.vehicle.charging:
@@ -1004,6 +1005,7 @@ class LastTripAverageFuelConsumption(TripStatisticSensor):
             if stats.daily_trips and stats.daily_trips[0].trips:
                 return stats.daily_trips[0].trips[0].average_fuel_consumption
 
+
 CATEGORY_ICONS = {
     "ASSISTANCE": "mdi:car-wrench",
     "COMFORT": "mdi:seat-recline-normal",
@@ -1014,6 +1016,7 @@ CATEGORY_ICONS = {
     "TIRE": "mdi:tire",
     "OTHER": "mdi:alert-circle",
 }
+
 
 class WarningLightSensor(MySkodaSensor):
     """Sensor for a specific warning light category."""
