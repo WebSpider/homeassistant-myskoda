@@ -15,7 +15,6 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import DiscoveryInfoType  # pyright: ignore [reportAttributeAccessIssue]
 
-from .const import COORDINATORS, DOMAIN
 from .coordinator import MySkodaConfigEntry, MySkodaDataUpdateCoordinator
 from .entity import MySkodaEntity
 
@@ -31,16 +30,12 @@ async def async_setup_entry(
     """Set up the image platform."""
 
     entities = []
-    for vin in hass.data[DOMAIN][config.entry_id][COORDINATORS]:
+    for vin, coordinator in config.runtime_data.items():
         for SensorClass in [
             MainRenderImage,
             LightStatusImage,
         ]:
-            entities.append(
-                SensorClass(
-                    hass.data[DOMAIN][config.entry_id][COORDINATORS][vin], vin, hass
-                )
-            )
+            entities.append(SensorClass(coordinator, vin, hass))
 
     async_add_entities(entities)
 

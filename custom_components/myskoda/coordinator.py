@@ -18,13 +18,13 @@ from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from myskoda import MySkoda, Vehicle
+from myskoda.models.common import Vin
 from myskoda.models.event import BaseEvent, OperationEvent, ServiceEvent
 from myskoda.models.user import User
 
 from .const import (
     API_COOLDOWN_IN_SECONDS,
     CONF_POLL_INTERVAL,
-    COORDINATORS,
     DEFAULT_FETCH_INTERVAL_IN_MINUTES,
     DOMAIN,
     MAX_STORED_OPERATIONS,
@@ -36,7 +36,7 @@ from .error_handlers import handle_aiohttp_error
 _LOGGER = logging.getLogger(__name__)
 
 type RefreshFunction = Callable[[], Coroutine[None, None, None]]
-type MySkodaConfigEntry = ConfigEntry[MySkodaDataUpdateCoordinator]
+type MySkodaConfigEntry = ConfigEntry[dict[Vin, MySkodaDataUpdateCoordinator]]
 
 
 class MySkodaDebouncer(Debouncer):
@@ -161,9 +161,7 @@ class MySkodaDataUpdateCoordinator(DataUpdateCoordinator[State]):
                     self._mqtt_retry_scheduled = False
 
                 try:
-                    coord = hass.data[DOMAIN][self.entry.entry_id][COORDINATORS][
-                        self.vin
-                    ]
+                    coord = self.entry.runtime_data[self.vin]
                     if not coord.myskoda.mqtt and not coord._mqtt_connecting:
                         self.entry.async_create_background_task(
                             self.hass, coord._mqtt_connect(), "mqtt"
